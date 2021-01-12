@@ -1,0 +1,179 @@
+---
+title: "Mathematical methods of data processing. L-6"
+author: "Yaroslav Kravchenko"
+date: "11/27/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(factoextra)
+library(gridExtra)
+library(tidyverse)
+library(fossil)
+library(ggbiplot)
+library(cluster)
+kernels <- read.delim("../data/seeds_dataset.txt", header = TRUE, sep = "\t", dec = ".")
+kernels$id <- seq.int(nrow(kernels))
+kernels$Var <- as.factor(kernels$Var)
+wheat <- kernels[1:7]
+```
+
+# Cluster analysis
+\
+\
+![Clsutering wheat species](../img/logo.jpg)
+\
+\
+
+# Introduction
+
+The *seeds* dataset contains 210 records of seven physical metrics of three wheat species, namely their kernels. The data was collected from real samples in 2009.
+
+```{r}
+head(wheat)
+```
+
+### Attribute information:
+
+    1. area A,
+    2. perimeter P,
+    3. compactness C = 4*pi*A/P^2,
+    4. length of kernel LK,
+    5. width of kernel WK,
+    6. asymmetry coefficient AC,
+    7. length of kernel groove LKG.
+
+All the paramters are real-valued and continuous.
+
+# Hierarchical clustering
+
+## Complete linkage
+
+```{r}
+wheat <- scale(wheat)
+
+k2 <- hcut(wheat, k = 2, hc_method = "complete")
+fviz_dend(k2, show_labels = FALSE, rect = TRUE)
+fviz_cluster(k2, geom = "point",  data = wheat) + ggtitle("k = 2")
+
+```
+
+## Ward distance
+```{r}
+k2 <- hcut(wheat, k = 2, hc_method = "ward.D2")
+fviz_dend(k2, show_labels = FALSE, rect = TRUE)
+fviz_cluster(k2, geom = "point",  data = wheat) + ggtitle("k = 2")
+
+```
+
+# k-means
+
+```{r}
+k2 <- kmeans(wheat, centers = 2, nstart = 25)
+k3 <- kmeans(wheat, centers = 3, nstart = 25)
+k4 <- kmeans(wheat, centers = 4, nstart = 25)
+k5 <- kmeans(wheat, centers = 5, nstart = 25)
+
+p1 <- fviz_cluster(k2, geom = "point", data = wheat) + ggtitle("k = 2")
+p2 <- fviz_cluster(k3, geom = "point",  data = wheat) + ggtitle("k = 3")
+p3 <- fviz_cluster(k4, geom = "point",  data = wheat) + ggtitle("k = 4")
+p4 <- fviz_cluster(k5, geom = "point",  data = wheat) + ggtitle("k = 5")
+
+grid.arrange(p1, p2, p3, p4, nrow = 2)
+```
+
+# Optimal number of clusters
+
+## WSS
+
+```{r}
+fviz_nbclust(wheat, kmeans, method = "wss")
+```
+
+## Average silhouette
+
+```{r}
+fviz_nbclust(wheat, kmeans, method = "silhouette")
+```
+
+## Gap statistic
+
+```{r}
+set.seed(123)
+gap_stat <- clusGap(wheat, FUN = kmeans, nstart = 25,
+                    K.max = 10, B = 500)
+print(gap_stat, method = "firstmax")
+fviz_gap_stat(gap_stat)
+```
+
+# PCA
+
+```{r}
+wheat_pca <- prcomp(wheat[,c(1:7)], center = TRUE,scale. = TRUE)
+# summary(wheat_pca)
+fviz_eig(wheat_pca)
+# ggbiplot(wheat_pca)
+ggbiplot(wheat_pca,ellipse=TRUE,obs.scale = 1, var.scale = 1, groups=kernels$Var)+
+  scale_colour_manual(name="Origin", values= c("forest green", "red3", "dark blue"))+
+  ggtitle("PCA wheat")+
+  theme_minimal()+
+  theme(legend.position = "bottom")
+```
+
+## Pick the most significant features
+
+```{r}
+summary(wheat_pca)
+
+wheat_pca$rotation
+var_scores <- abs(wheat_pca$rotation[,1])
+var_scores_ranked <- sort(var_scores, decreasing = TRUE)
+names(var_scores_ranked)
+var_scores <- abs(wheat_pca$rotation[,2])
+var_scores_ranked <- sort(var_scores, decreasing = TRUE)
+names(var_scores_ranked)
+var_scores <- abs(wheat_pca$rotation[,3])
+var_scores_ranked <- sort(var_scores, decreasing = TRUE)
+names(var_scores_ranked)
+```
+
+
+# CA with 2 features
+
+## k-means
+
+```{r}
+wheat <- wheat[,c(1,6)]
+head(wheat)
+f2 <- kmeans(wheat, centers = 3, nstart = 25)
+fviz_cluster(f2, geom = "point", data = wheat) + ggtitle("k = 3")
+```
+
+## Hierarchical
+
+```{r}
+hc.cut <- hcut(wheat, k = 3, hc_method = "ward.D")
+fviz_dend(hc.cut, show_labels = FALSE, rect = TRUE)
+```
+
+## Optimal number of clusters
+
+```{r}
+fviz_nbclust(wheat, kmeans, method = "silhouette")
+```
+
+# Compare clusters
+
+```{r}
+adj.rand.index(f2$cluster, hc.cut$cluster)
+```
+# Evaluate clustering
+
+```{r}
+t1 <- table(kernels$Var, f2$cluster)
+t2 <- t1[c(3,1,2),]
+t2
+sum(diag(t2)/sum(t2))
+```
+
